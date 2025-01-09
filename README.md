@@ -1,6 +1,6 @@
 # Synthesizing Moving People with 3D Control
 
-Please [take a look at our demo video](https://www.youtube.com/watch?v=iGGlFQJ-OyQ) for a brief overview.
+Please [take a look at our demo video](https://www.youtube.com/watch?v=obABCBP-fC0) for a brief overview.
 
 ## Abstract
 We present a diffusion model-based framework for animating people from a single image for a given target 3D motion sequence.
