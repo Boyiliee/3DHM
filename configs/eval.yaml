@@ -1,0 +1,182 @@
+# @package _global_
+
+defaults:
+    - launcher: default.yaml
+    - trainer: default.yaml
+
+callbacks:
+    model_checkpoint:
+        _target_: pytorch_lightning.callbacks.ModelCheckpoint
+        dirpath: ${paths.output_dir}/checkpoints
+        filename: "epoch_{epoch:03d}"
+        monitor: "val/loss" #"val/mAP"
+        mode: "min"
+        save_last: True
+        auto_insert_metric_name: False
+        verbose: False # verbosity mode
+        save_top_k: 1 # save k best models (determined by above metric)
+        save_weights_only: False # if True, then only the model’s weights will be saved
+        every_n_train_steps: null # number of training steps between checkpoints
+        train_time_interval: null # checkpoints are monitored at the specified time interval
+        every_n_epochs: 10 # number of epochs between checkpoints
+        save_on_train_epoch_end: True # whether to run checkpointing at the end of the training epoch or the end of validation
+
+    model_summary:
+        _target_: pytorch_lightning.callbacks.RichModelSummary
+        max_depth: 1
+
+    rich_progress_bar:
+        _target_: pytorch_lightning.callbacks.RichProgressBar
+        refresh_rate: 1
+
+    learning_rate_monitor:
+        _target_: pytorch_lightning.callbacks.LearningRateMonitor  
+
+    timer:
+        _target_: pytorch_lightning.callbacks.Timer  
+
+logger:
+    tensorboard:
+        _target_: pytorch_lightning.loggers.tensorboard.TensorBoardLogger
+        save_dir: "${paths.output_dir}/tensorboard/test"
+        version: 0
+
+paths: 
+    root_dir: ${oc.env:PROJECT_ROOT}
+    data_dir: ${paths.root_dir}/data/
+    log_dir: ${paths.root_dir}/logs/
+    output_dir: ${hydra:runtime.output_dir}
+    work_dir: ${hydra:runtime.cwd}
+
+extras:
+    print_config: True
+
+hydra:
+    run:
+        dir: ${paths.log_dir}/${task_name} #/runs/${now:%Y-%m-%d}_${now:%H-%M-%S}
+    sweep:
+        dir: ${paths.log_dir}/${task_name} #/multiruns/${now:%Y-%m-%d}_${now:%H-%M-%S}
+        subdir: ${hydra.job.num}
+
+hydra_logging: colorlog
+job_logging: colorlog
+
+
+# task name, determines output directory path
+task_name: "debug"
+tags: ["dev"]
+# slrum_job_id: ${oc.env:SLURM_ARRAY_TASK_ID}
+
+# set False to skip model training
+train: False
+
+# evaluate on test set, using best model weights achieved during training
+# lightning chooses best weights based on the metric specified in checkpoint callback
+test: True
+
+# simply provide checkpoint path to resume training
+ckpt_path: null
+
+# seed for random number generators in pytorch, numpy and python.random
+seed: null
+
+
+datamodule:
+    _target_: smt.datamodules.phalp_datamodule.PHALPDataModule
+    cfg: ${configs}
+    train: ${train}
+
+model:
+    _target_: smt.models.SMT.STABLE_MOTION_LitModule
+    cfg: ${configs}
+
+configs:
+    train: False
+    inference_mask: True
+    timesteps_max: 50 #1000
+    data_dir: ${paths.data_dir}
+    storage_folder: "${paths.log_dir}/${task_name}/${hydra:sweep.subdir}"
+    train_dataset: ava_train,kinetics_train
+    test_dataset: ava_train,kinetics_train #ava_val
+    tmap_path: ''
+    train_batch_size: 8
+    train_num_workers: 8
+    test_batch_size: 8
+    test_num_workers: 8
+    pin_memory: True
+    frame_length: 50
+    max_people: 1
+    load_other_tracks: False
+    img_size: 256
+    load_images: False
+    weights_path: null
+    debug: False
+    load_strict: False
+    base_model: stablemotion
+    
+    log_frequency: 100
+    hmr_model: "hmr2018"
+
+    max_predict_length: 10
+    randomize_prediction: False
+    
+    metadata_path: "dataset/processed_datas.json"
+
+    # added **
+    sdiff:
+        MODEL_NAME: "stable-diffusion-v1-5/stable-diffusion-v1-5" 
+        SMTMODEL_NAME: "stable-diffusion-v1-5/stable-diffusion-v1-5"  #"runwayml/stable-diffusion-inpainting"
+        lr_scheduler: "constant"
+        lr_warmup_steps: 0
+        learning_rate: 1e-05
+        max_train_steps: 20000
+        snr_gamma: 5
+        noise_scheduler:
+            _class_name: "DDIMScheduler"
+            _diffusers_version: "0.8.0"
+            beta_end: 0.012
+            beta_schedule: "scaled_linear"
+            beta_start: 0.00085
+            clip_sample: false
+            num_train_timesteps: 1000
+            steps_offset: 1
+            trained_betas: null
+            # rescale_betas_zero_snr: true
+            # timestep_spacing: "trailing"
+            prediction_type: "v_prediction"
+        gradient_accumulation_steps: 4
+        scale_lr: False
+        adam_epsilon: 1e-08
+        use_ema: False
+        weight_decay: 1e-2
+        task_name: debug
+        debug_flag: 0
+        guidance_scale: 0 #4.5 # 7.5, 0
+        guidance_scale_control: 0
+        video_save_path: "./video"
+    render:
+        enable: False
+        engine: "PYR"
+        num_videos: 10
+        vis_pred_loca: True
+        vis_action_label: "person"
+        res: 256
+        render_up_scale: 2
+        walker: "SMPL+B"  # PL, SMPL, SMPL+T, SMPL+T+B
+
+    ipadapter:
+        ADAPTER_NAME: "IP-Adapter/models/ip-adapter-plus_sd15.bin"
+        VAE_NAME: "sd-vae-ft-mse"
+        IMAGE_ENCODER_NAME: "IP-Adapter/models/image_encoder"
+
+    motionadapter:
+        MODEL_NAME: "./animatediff-motion-adapter-v1-5-2" 
+
+    smpl_cfg:
+        SMPL:
+            MODEL_PATH: data/models/smpl/
+            GENDER: neutral
+            MODEL_TYPE: smpl
+            NUM_BODY_JOINTS: 23
+            JOINT_REGRESSOR_EXTRA: data/SMPL_to_J19.pkl
+            TEXTURE: data/texture.npz
